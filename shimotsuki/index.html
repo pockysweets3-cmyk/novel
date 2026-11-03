@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>霜月庵の朝</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* 右綴じの上製本を机の上に開く。紙は象牙、布表紙は藍、朱は章番号だけ。 */
+:root {
+  --desk: #14171c;
+  --ink: #1e1c19;
+  --paper: #f0ece1;
+  --faint: #8b8676;
+  --navy: #1c2a3d; /* 作品ごとに上書き */
+  --gold: #c8ad6e;
+  --accent: #9a2f2b;
+  --serif: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  --ease: cubic-bezier(.45, .05, .25, 1);
+  color-scheme: dark;
+}
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 38%, #232932 0%, var(--desk) 72%);
+}
+#stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  outline: none;
+}
+.book {
+  position: relative;
+  perspective: 2800px;
+  transition: transform .95s var(--ease);
+}
+.shadow {
+  position: absolute;
+  left: 0; bottom: -22px;
+  height: 36px;
+  background: radial-gradient(ellipse at 50% 40%, rgba(0, 0, 0, .6), transparent 70%);
+  filter: blur(7px);
+  transition: width .95s var(--ease);
+}
+
+/* 本の骨格：裏表紙の板、小口の紙の厚み、めくれる丁 */
+.board {
+  position: absolute;
+  top: -5px; left: -5px;
+  width: calc(var(--W) + 5px);
+  height: calc(var(--H) + 10px);
+  background: var(--navy);
+  border-radius: 4px 0 0 4px;
+  z-index: 1;
+}
+.board .ep { position: absolute; inset: 5px 0 5px 5px; }
+.edge {
+  position: absolute;
+  top: 1px;
+  width: var(--W);
+  height: calc(var(--H) - 2px);
+  background: #dcd6c6;
+  z-index: 2;
+  transition: opacity .6s;
+}
+.edge.el { left: 0; }
+.edge.er { left: var(--W); }
+.single .edge.er { display: none; }
+
+.leaf {
+  position: absolute;
+  top: 0; left: 0;
+  width: var(--W);
+  height: var(--H);
+  transform-origin: 100% 50%;
+  transform-style: preserve-3d;
+  transition: transform .95s var(--ease);
+}
+.leaf.flipped { transform: rotateY(180deg); }
+.single .leaf.flipped { visibility: hidden; transition: transform .95s var(--ease), visibility 0s .95s; }
+.single .leaf:not(.flipped) { visibility: visible; transition: transform .95s var(--ease), visibility 0s 0s; }
+.leaf.cover {
+  top: -5px; left: -5px;
+  width: calc(var(--W) + 5px);
+  height: calc(var(--H) + 10px);
+}
+.face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.face.back { transform: rotateY(180deg); }
+.face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(to right, rgba(20, 14, 6, .0), rgba(20, 14, 6, .42));
+}
+.face.back::after { background: linear-gradient(to left, rgba(20, 14, 6, .0), rgba(20, 14, 6, .42)); }
+.leaf.turning .face::after { animation: shade .95s var(--ease); }
+@keyframes shade { 0% { opacity: 0; } 45% { opacity: 1; } 100% { opacity: 0; } }
+
+/* 本文の紙 */
+.pg {
+  position: absolute;
+  inset: 0;
+  background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient(0deg, rgba(120, 100, 60, .022) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, rgba(255, 255, 255, .25), transparent 14%, transparent 86%, rgba(90, 70, 30, .05));
+}
+.pg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pg.L::before { background: linear-gradient(to left, rgba(70, 55, 28, .26), rgba(70, 55, 28, .07) 8%, transparent 22%); }
+.pg.R::before { background: linear-gradient(to right, rgba(70, 55, 28, .26), rgba(70, 55, 28, .07) 8%, transparent 22%); }
+.pg.blank::after { content: none; }
+
+.text {
+  position: absolute;
+  top: var(--vpad);
+  width: var(--Tw);
+  height: var(--Th);
+  writing-mode: vertical-rl;
+  font-family: var(--serif);
+  font-size: var(--fs);
+  line-height: var(--L);
+  font-weight: 400;
+  color: var(--ink);
+  text-align: justify;
+  text-justify: inter-character;
+  line-break: strict;
+  letter-spacing: 0;
+}
+.pg.L .text { right: var(--inner); }
+.pg.R .text { left: var(--inner); }
+.text.measure { position: fixed; left: -9999px; visibility: hidden; pointer-events: none; }
+.text > * { margin: 0; }
+.text > :first-child { margin-block-start: 0; }
+.text .nar { text-indent: 1em; }
+.text .dlg, .text .cont { text-indent: 0; }
+.text .scene { margin-block: var(--L); text-indent: 0; text-align: center; color: var(--faint); }
+.text .let { font-size: .94em; padding-inline-start: 2em; text-indent: 1em; }
+.text .let.cont { text-indent: 0; }
+.text .note { font-size: .92em; padding-inline-start: 1.6em; text-indent: 0; letter-spacing: .06em; color: #3b3832; }
+.text .gap { block-size: calc(var(--L) * .6); }
+.text .fin { margin-block-start: var(--L); text-indent: 0; text-align: end; color: var(--faint); }
+.text h2 {
+  margin: 0 0 calc(var(--L) * 1.5);
+  padding-inline-start: calc(var(--fs) * 4);
+  font-size: 1.4em;
+  font-weight: 700;
+  letter-spacing: .2em;
+  line-height: var(--L);
+}
+.text h2 .no { display: inline-block; margin-block-end: .9em; color: var(--accent); }
+.text h2 .ttl { display: inline-block; }
+.text.colo p { text-indent: 0; text-align: end; }
+.text.colo .ct { font-size: 1.15em; letter-spacing: .3em; font-weight: 500; }
+.text.colo .cd { font-size: .8em; color: var(--faint); letter-spacing: .12em; }
+
+.rh {
+  position: absolute;
+  top: calc(var(--vpad) * .6);
+  writing-mode: vertical-rl;
+  font-family: var(--serif);
+  font-size: calc(var(--fs) * .62);
+  letter-spacing: .32em;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.pn {
+  position: absolute;
+  bottom: calc(var(--vpad) * .55);
+  font-family: var(--serif);
+  font-size: calc(var(--fs) * .66);
+  letter-spacing: .08em;
+  color: var(--faint);
+}
+.pg.L .rh, .pg.L .pn { left: calc(var(--outer) * .4); }
+.pg.R .rh, .pg.R .pn { right: calc(var(--outer) * .4); }
+.curl {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: calc(var(--W) * .075);
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: linear-gradient(45deg, rgba(60, 46, 20, .16) 0 50%, transparent 50%);
+}
+
+/* 見返し：藍の格子紙 */
+.ep {
+  background-color: #c6cfd9;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(30, 48, 78, .17) 0 1px, transparent 1px 12px),
+    repeating-linear-gradient(-45deg, rgba(30, 48, 78, .17) 0 1px, transparent 1px 12px);
+}
+.face.endpaper { background: var(--navy); }
+.face.endpaper .ep { position: absolute; inset: 5px 5px 5px 0; }
+.face.endpaper .ep::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, rgba(20, 30, 50, .34), rgba(20, 30, 50, .08) 9%, transparent 24%);
+}
+.board .ep::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to left, rgba(20, 30, 50, .34), rgba(20, 30, 50, .08) 9%, transparent 24%);
+}
+
+/* 表紙：藍の布、金の罫、題簽 */
+.cv {
+  position: absolute;
+  inset: 0;
+  border-radius: 5px 1px 1px 5px;
+  background-color: var(--navy);
+  background-image:
+    linear-gradient(to left, rgba(0, 0, 0, .5) 0, rgba(0, 0, 0, .0) 6%),
+    linear-gradient(to left, transparent 7.5%, rgba(255, 255, 255, .05) 7.5%, transparent 8.5%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .07) 0 1px, transparent 1px 4px),
+    radial-gradient(ellipse at 30% 25%, rgba(70, 100, 150, .22), transparent 70%);
+}
+.cv .frame {
+  position: absolute;
+  inset: 4.5% 11% 4.5% 6%;
+  border: 1px solid var(--gold);
+  opacity: .5;
+}
+.cv .label {
+  position: absolute;
+  right: 21%;
+  top: 10%;
+  padding: 1.3em .7em;
+  writing-mode: vertical-rl;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: calc(var(--fs) * 1.35);
+  letter-spacing: .38em;
+  color: #1c1a17;
+  background: #efe9d8;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+.cv .label::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(40, 30, 10, .35);
+}
+.cv svg {
+  position: absolute;
+  left: 12%;
+  bottom: 9%;
+  width: 36%;
+  height: auto;
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaf, .book, .shadow { transition-duration: .01s !important; }
+  .leaf.turning .face::after { animation: none; }
+}
+
+.home {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  z-index: 5000;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: #9aa1a8;
+  opacity: .55;
+  transition: opacity .2s, background .2s;
+}
+.home:hover, .home:focus-visible { opacity: 1; background: rgba(255, 255, 255, .08); outline: none; }
+.home svg { width: 20px; height: 20px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="stage" tabindex="0" aria-label="霜月庵の朝"></div>
+<a class="home" href="../" aria-label="本棚へ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="4" height="16" rx=".6"/><rect x="10" y="4" width="4" height="16" rx=".6"/><path d="M16.5 5.5l3.4 1 -3.2 13.3 -3.4 -1z"/></svg></a>
+<script id="data" type="application/json">{"meta": {"id": "shimotsuki", "title": "霜月庵の朝", "cover": "seiro", "color": "#27383a", "date": "二〇二六年十一月三日"}, "blocks": [{"t": "ch", "no": "一", "title": "朝"}, {"t": "p", "c": "nar", "x": "大槻宗吉を殺したと名乗り出た者は、三人いた。"}, {"t": "p", "c": "nar", "x": "一人は息子で、一人はその妻で、一人は十七歳の孫だった。三人は別々の時刻と別々の方法を語り、そのどれもが、聞く者を黙らせるほど真に迫っていた。"}, {"t": "p", "c": "nar", "x": "けれど、県警捜査一課の小野寺梢が最初に霜月庵の暖簾をくぐった水曜日の朝、そこにあったのは、まだ誰一人として何も名乗り出ていない、ひどく静かな家だった。"}, {"t": "sc"}, {"t": "p", "c": "nar", "x": "十一月の山あいは、午前七時を過ぎても陽が届かない。国道から細い坂道を二キロ上がった先に、霜月庵はあった。蕎麦屋としては小さな店で、母屋が奥で店と繋がり、その境目にある六畳ほどの板の間が打ち場だという。"}, {"t": "p", "c": "dlg", "x": "「通報は六時四十二分。長女の真由美さん、四十七歳。薬剤師で、三日前から東京から帰省していたそうです」"}, {"t": "p", "c": "nar", "x": "相棒の柏木が手帳を読み上げた。二十八歳、一課に来て二年目。小野寺は頷いて、靴にビニールの覆いをかけた。"}, {"t": "p", "c": "nar", "x": "打ち場の床に、老人が仰向けに倒れていた。"}, {"t": "p", "c": "nar", "x": "大槻宗吉、七十八歳。この店の三代目の主人。作務衣の胸元は乱れておらず、両腕は体の脇に伸びている。後頭部の下に、黒く乾いた血溜まりが、手のひら二つぶんほど広がっていた。"}, {"t": "p", "c": "dlg", "x": "「後頭部に挫裂創がひとつ。形から見て、角のあるもので打っています」検視官が言った。「死後四時間から六時間。夜半から未明、というところかな。詳しくは解剖です。ただ、倒れ方がね。自分で転んだにしては、少しばかり整いすぎてる」"}, {"t": "p", "c": "nar", "x": "小野寺は部屋を見回した。"}, {"t": "p", "c": "nar", "x": "中央に、檜の一枚板の打ち台。その上に木鉢が置かれ、中に、ぼそぼそと固まった粉が残っている。蕎麦の水回しの途中だ、と小野寺は思った。打ち台の脇の床に、長いのし棒が一本、転がっていた。先端に血が薄く、横に引き伸ばされたように付いている。"}, {"t": "p", "c": "dlg", "x": "「凶器ですかね」"}, {"t": "p", "c": "dlg", "x": "「まだ決めつけないで」"}, {"t": "p", "c": "nar", "x": "血が妙に薄いのが、小野寺は気になった。何かで擦ったような跡だ。けれど、それは今は口にしなかった。"}, {"t": "sc"}, {"t": "p", "c": "nar", "x": "奥の座敷に、家族が集められていた。"}, {"t": "p", "c": "nar", "x": "座卓を囲んで座る四人。奥に長女の真由美。化粧けのない顔は青ざめ、膝の上で両手を握りしめている。その隣に長男の健一、五十歳。作業着の上着を着たままで、背中を丸めている。袖口の貝ボタンがひとつ欠けて、糸がほつれているのが、小野寺の目に留まった。向こうに、健一の妻の澄香、四十六歳。割烹着の袖を強く握っている。髪が一筋、頬にほつれていた。そして一番端に、高校の制服を着た少年、孫の蓮。十七歳。唇の色がなかった。祖父に習って蕎麦を打つ子で、いつも首に手拭いをかけている、と近所の人から聞いていた。今朝のその首元は、空っぽだった。"}, {"t": "p", "c": "nar", "x": "座卓の上には、せいろが五つ、伏せて並べてあった。"}, {"t": "p", "c": "dlg", "x": "「今日は、定休日ですね」"}, {"t": "p", "c": "nar", "x": "小野寺が訊くと、澄香が顔を上げた。"}, {"t": "p", "c": "dlg", "x": "「水曜は、休みです」"}, {"t": "p", "c": "dlg", "x": "「せいろが出ているのは、お店の支度で？」"}, {"t": "p", "c": "dlg", "x": "「いえ……」澄香は言い淀んだ。「定休日にこんなものを出したことは、この十年、一度もありません。私は、出していません」"}, {"t": "p", "c": "dlg", "x": "「お義父さんが、出したと」"}, {"t": "p", "c": "dlg", "x": "「……たぶん」"}, {"t": "p", "c": "nar", "x": "誰も、それ以上は言わなかった。"}, {"t": "p", "c": "nar", "x": "発見の経緯を、真由美が小さな声で語った。朝六時半に目が覚めて、水を飲みに降りてきた。打ち場の戸が少し開いていて、覗くと、父が倒れていた。"}, {"t": "p", "c": "dlg", "x": "「脈は、診ましたか」"}, {"t": "p", "c": "dlg", "x": "「薬剤師ですから、反射で……。もう、冷たかったです」真由美は唇を噛んだ。「父は心臓が悪くて、ニトロを持ち歩いていました。作務衣のポケットに、瓶が入っているはずです」"}, {"t": "p", "c": "nar", "x": "検視官が頷いた。瓶は、ポケットの中にあった。蓋が緩んでいた。"}, {"t": "p", "c": "dlg", "x": "「新しいのに替えなさいって、何度も言ったんです。ニトロは、開封して三か月で効きが落ちるから。送りもしました。でも父は、使えるうちは使うって。……ごめんなさい。事件と関係ない話ですね」"}, {"t": "p", "c": "dlg", "x": "「いえ」"}, {"t": "p", "c": "nar", "x": "小野寺はメモを取った。開封済みの瓶。緩い蓋。それが事件と関係があるのかどうか、まだ分からなかった。"}, {"t": "p", "c": "nar", "x": "昨夜のことを尋ねると、真由美が答えた。夜の十時前から座敷で、家族みんなで揉めていた。土地の話だという。県道の拡幅で、店の土地を売れば二億になる。道の駅の業者から、話が来ている。健一は売りたがり、父は頑として頷かなかった。"}, {"t": "p", "c": "dlg", "x": "「『店は俺が死ぬまで俺のもんだ。死んだら好きにしろ』と。それで父は、打ち場に引っ込んでしまって」"}, {"t": "p", "c": "nar", "x": "そのとき、台所のほうで、洗濯機が脱水に入る音がした。"}, {"t": "p", "c": "nar", "x": "澄香が、はっと肩を揺らした。"}, {"t": "p", "c": "dlg", "x": "「朝のうちに回すのが、癖で」聞かれもしないのに、彼女は言った。「止めましょうか」"}, {"t": "p", "c": "dlg", "x": "「構いません。そのままで」"}, {"t": "p", "c": "nar", "x": "小野寺は、その音を聞きながら、四人の顔を順に見た。誰も、互いに目を合わせようとしなかった。ただ、健一が一度だけ妻のほうを見て、澄香が一度だけ息子のほうを見て、蓮が一度だけ、父親の背中を見た。そして誰も、それ以上は動かなかった。"}, {"t": "p", "c": "dlg", "x": "「仲のいい家族では、なさそうですね」"}, {"t": "p", "c": "nar", "x": "廊下に出ると、柏木が声を落として言った。"}, {"t": "p", "c": "dlg", "x": "「動機なら、全員にありますよ。二億円と、頑固な父親と」"}, {"t": "p", "c": "dlg", "x": "「動機は、ね」"}, {"t": "p", "c": "nar", "x": "小野寺は、座敷の戸を閉めた。座卓の上の五つのせいろが、閉まる隙間から、白く光って見えた。"}, {"t": "ch", "no": "二", "title": "長男"}, {"t": "p", "c": "nar", "x": "午後三時に、健一は自分から署に来た。"}, {"t": "p", "c": "dlg", "x": "「取調べを、お願いします」"}, {"t": "p", "c": "nar", "x": "椅子に座るなり、両手を膝の上で揃えた。作業着のままだった。袖口のボタンは欠けたままだ。"}, {"t": "p", "c": "dlg", "x": "「親父を殺したのは、私です」"}, {"t": "p", "c": "nar", "x": "小野寺は、すぐには頷かなかった。「順番に、聞かせてください」"}, {"t": "p", "c": "dlg", "x": "「昨夜は、土地のことで揉めました。十時前から座敷で、家族みんなで。私は、売って別の場所でやり直せばいいと言った。親父は聞かなかった。『店は俺が死ぬまで俺のもんだ』と」"}, {"t": "p", "c": "dlg", "x": "「それで」"}, {"t": "p", "c": "dlg", "x": "「親父が打ち場に引っ込んだので、追いかけました。十時二十分頃です」健一は唾を飲んだ。「親父は、打ち台の前に立って、粉を回していました。私に背を向けて。『お前の顔は見たくない』と言われて、頭に血が上って。そこにあったのし棒を取って、後ろから、一度だけ殴りました」"}, {"t": "p", "c": "dlg", "x": "「どこを」"}, {"t": "p", "c": "dlg", "x": "「後ろの頭を。親父は前のめりに倒れて、動かなくなりました」"}, {"t": "p", "c": "nar", "x": "小野寺はペンを止めなかった。ただ、頭の中で、仰向けに倒れていた老人の姿を、もう一度なぞった。"}, {"t": "p", "c": "dlg", "x": "「そのあと、どうしましたか」"}, {"t": "p", "c": "dlg", "x": "「のし棒の血を拭いて、元の場所に戻しました。それから、寝ました。何もできなかった」"}, {"t": "p", "c": "dlg", "x": "「救急車は」"}, {"t": "p", "c": "dlg", "x": "「呼べば、私がやったと分かる。……最低です。分かっています」"}, {"t": "p", "c": "dlg", "x": "「ご家族は、このことを」"}, {"t": "p", "c": "dlg", "x": "「家内も息子も、何も知りません」健一は、まだ聞かれてもいないうちに、かぶせるように言った。「二人は、昨夜はもう寝ていました。関係ありません。本当に」"}, {"t": "p", "c": "dlg", "x": "「袖のボタンが取れていますね」"}, {"t": "p", "c": "nar", "x": "健一は、袖口をちらりと見た。"}, {"t": "p", "c": "dlg", "x": "「……もみ合ったときに、取れたんだと思います」"}, {"t": "p", "c": "dlg", "x": "「もみ合いは、先ほどの話にありませんでした」"}, {"t": "p", "c": "dlg", "x": "「……そうでした。最初に、親父に胸ぐらを掴まれて」"}, {"t": "p", "c": "dlg", "x": "「掴まれて、取れた」"}, {"t": "p", "c": "dlg", "x": "「はい」"}, {"t": "p", "c": "nar", "x": "小野寺は、それ以上は訊かなかった。調書が出来上がるのを待つあいだ、健一は取調室の壁のほうを、ずっと見ていた。いや、壁の向こうの、廊下のほうを。そこには誰もいないはずだった。けれど健一は、足音がするたびに、ほんの少し背筋を伸ばした。"}, {"t": "ch", "no": "三", "title": "妻"}, {"t": "p", "c": "nar", "x": "澄香が現れたのは、夕方の五時だった。"}, {"t": "p", "c": "nar", "x": "健一が自白したことは、すでに町に伝わっていた。澄香は、署の入口で、巡査の制止を振り切るように、小野寺の前に立った。"}, {"t": "p", "c": "dlg", "x": "「主人は、嘘をついています」"}, {"t": "p", "c": "dlg", "x": "「座ってください」"}, {"t": "p", "c": "dlg", "x": "「私なんです。殺したのは、私です」"}, {"t": "p", "c": "nar", "x": "澄香は、割烹着を脱いだ上から、よそ行きの紺のカーディガンを着ていた。髪はきちんと留め直され、新しい髪留めがひとつ、後ろに挟まれている。朝の、ほつれた髪の面影はなかった。"}, {"t": "p", "c": "dlg", "x": "「昨夜は、十時を過ぎても、お義父さんが打ち場から出てこないので、お茶を持っていきました。十一時四十五分です。喧嘩のあとは、いつもそうなんです」"}, {"t": "p", "c": "dlg", "x": "「そのとき、お義父さんは」"}, {"t": "p", "c": "dlg", "x": "「打ち台の鉢の前に、立っていました。粉に水を回して。……話しかけたら、急に怒鳴り出したんです。『土地の話は、全部お前の入れ知恵だろう。お前が嫁に来てから、この家は』と」"}, {"t": "p", "c": "nar", "x": "澄香は、一度、息を吸った。"}, {"t": "p", "c": "dlg", "x": "「頭が真っ白になって、両手で、胸を押したんです。お義父さんは後ろに倒れて、打ち台の角に、頭を。それきり、動かなくなりました」"}, {"t": "p", "c": "dlg", "x": "「のし棒は」"}, {"t": "p", "c": "dlg", "x": "「触っていません。夫がのし棒だと言ったのは、私を庇って作った話です」"}, {"t": "p", "c": "dlg", "x": "「ご主人が、あなたを庇った、と」"}, {"t": "p", "c": "dlg", "x": "「あの人は、そういう人です」澄香は、わずかに笑った。「だからお願いです。夫は、帰してあげてください」"}, {"t": "p", "c": "nar", "x": "小野寺は、ゆっくりと頷いた。それから、ほんの何気ない調子で訊いた。"}, {"t": "p", "c": "dlg", "x": "「今朝、洗濯機を回していらっしゃいましたね。何を洗っていたんですか」"}, {"t": "p", "c": "dlg", "x": "「……いつものタオルです。台所の」"}, {"t": "p", "c": "dlg", "x": "「そうですか」"}, {"t": "p", "c": "nar", "x": "澄香の、膝の上の指が、一度だけ強く握られた。"}, {"t": "ch", "no": "四", "title": "孫"}, {"t": "p", "c": "nar", "x": "蓮は、叔母の真由美に付き添われて、夜の七時に来た。"}, {"t": "p", "c": "nar", "x": "十七歳。制服の上着のポケットに手を入れたまま、小野寺の前に座ると、まっすぐに顔を上げた。"}, {"t": "p", "c": "dlg", "x": "「父も母も、嘘です。祖父を殺したのは、僕です」"}, {"t": "p", "c": "nar", "x": "真由美が、隣で短く息を呑んだ。"}, {"t": "p", "c": "dlg", "x": "「順番に、聞かせてくれる」"}, {"t": "p", "c": "dlg", "x": "「昨日の夜、零時を過ぎてから、祖父のところに行きました。昼間、父さんの味方をして、祖父に失礼なことを言ったから、謝ろうと思って。零時二十分でした」"}, {"t": "p", "c": "nar", "x": "蓮の声は、静かだった。静かすぎるほどだった。"}, {"t": "p", "c": "dlg", "x": "「祖父は、打ち台で、生地を練っていました。僕が入っていったら、『出ていけ』と。『お前は、あいつの味方だろう』と。何を言われたか、よく覚えていません。気づいたら、そこにあったのし棒を持っていました。左側から、一回だけ。祖父は横に倒れて、動かなくなりました」"}, {"t": "p", "c": "dlg", "x": "「それから？」"}, {"t": "p", "c": "dlg", "x": "「怖くなって、部屋に戻りました」"}, {"t": "p", "c": "dlg", "x": "「手拭いは、持っていた？」"}, {"t": "p", "c": "nar", "x": "小野寺は、何気なく訊いた。蓮の肩が、ごくわずかに揺れた。"}, {"t": "p", "c": "dlg", "x": "「……手拭い？」"}, {"t": "p", "c": "dlg", "x": "「蕎麦を習っている人は、持ち歩くんでしょう」"}, {"t": "p", "c": "dlg", "x": "「……部屋に、あります」"}, {"t": "p", "c": "dlg", "x": "「そう」"}, {"t": "p", "c": "nar", "x": "そのあと小野寺は、蓮の両手を見せてもらった。右の手のひらの付け根に、硬いタコがある。毎朝、祖父の隣で麺棒を握ってきた手だ。その手が、膝の上で小刻みに震えていた。"}, {"t": "p", "c": "dlg", "x": "「どうして、三人とも、自分だと言うんでしょうね」"}, {"t": "p", "c": "nar", "x": "小野寺がそう言うと、蓮は唇を噛んだ。"}, {"t": "p", "c": "dlg", "x": "「……三人とも、本当にやったからです」"}, {"t": "p", "c": "dlg", "x": "「そうかもしれない」"}, {"t": "sc"}, {"t": "p", "c": "nar", "x": "蓮が帰ったあと、小野寺は、署の一室のホワイトボードに、三つの時刻を書いた。"}, {"t": "p", "c": "nar", "x": "二二時二〇分。二三時四五分。〇時二〇分。"}, {"t": "p", "c": "nar", "x": "三人の、時刻と方法。刺し方も、倒れ方も、ひとつとして重ならなかった。けれど、書き終えて一歩下がって眺めているうちに、小野寺は、あることに気づいた。"}, {"t": "p", "c": "nar", "x": "三人とも、被害者が粉を回していた、と言った。生地を練っていた、と言った。"}, {"t": "p", "c": "nar", "x": "三人とも、あの鉢の話をしている。"}, {"t": "p", "c": "dlg", "x": "「柏木」"}, {"t": "p", "c": "dlg", "x": "「はい」"}, {"t": "p", "c": "dlg", "x": "「明日、蕎麦屋に行く。森田さんという人に会いたい」"}, {"t": "ch", "no": "五", "title": "水回し"}, {"t": "p", "c": "nar", "x": "森田庵は、霜月庵から山を下りて三キロの町にある。主人の森田は七十歳。宗吉とは三十年来の蕎麦仲間で、同時に、いちばんの商売敵だったという。"}, {"t": "p", "c": "dlg", "x": "「宗吉が、死んだか」"}, {"t": "p", "c": "nar", "x": "森田は、仕込みの手を止めずに言った。それから手を洗って、小野寺たちと一緒に、霜月庵へ向かった。"}, {"t": "p", "c": "nar", "x": "規制線の中の打ち場は、前の日のままだった。森田は、打ち台の前に立って、しばらく鉢の中を見ていた。"}, {"t": "p", "c": "dlg", "x": "「二八だな。蕎麦粉八に、つなぎの小麦粉二。宗吉の昔からの配合だ」"}, {"t": "p", "c": "dlg", "x": "「水回しの途中、ですか」"}, {"t": "p", "c": "dlg", "x": "「途中というか」森田は、粉を指先でつまんで、擦り合わせた。「水回しは、粉に水を均等に行き渡らせて、そぼろ状にするまで。ここまで来たら、すぐにまとめて練る。放っておくと、表面から乾いて、こうなる」"}, {"t": "p", "c": "nar", "x": "粉は、ぼそぼそと固く、鉢の縁に張りついていた。"}, {"t": "p", "c": "dlg", "x": "「どれくらい放っておくと、こうなりますか」"}, {"t": "p", "c": "dlg", "x": "「この部屋の温度なら、四時間は経ってる。ただ、五時間は、いってない」"}, {"t": "p", "c": "dlg", "x": "「根拠は」"}, {"t": "p", "c": "dlg", "x": "「五時間も放っておいたら、水が抜けて、粉に戻るんだ。これは、まだ湿り気が残ってる。四時間。それくらいだ」"}, {"t": "p", "c": "nar", "x": "小野寺は、腕時計を見た。刑事たちが霜月庵に着いたのは、昨日の朝の七時二十分。そこから四時間を遡れば、午前三時二十分。五時間なら、二時二十分。"}, {"t": "p", "c": "dlg", "x": "「つまり、水回しを始めたのは、午前二時二十分から、三時二十分のあいだ」"}, {"t": "p", "c": "dlg", "x": "「そうなる。しかも、始めてすぐに、手が止まってる。宗吉は、水回しから先を、一度も進められなかったんだ」"}, {"t": "p", "c": "nar", "x": "柏木が、息を呑む音がした。"}, {"t": "p", "c": "dlg", "x": "「粉の量は」"}, {"t": "p", "c": "dlg", "x": "「一斤。六百グラム近い。五人前だ。店で打つ量じゃない。店は十人前を単位にしてる」森田は、不思議そうに首を傾げた。「あいつは、昔から、腹が立つと蕎麦を打つ男だった。ただ、いつも一人前か二人前だ。五人前なんてのは、孫の誕生日に打ったとき以来だ」"}, {"t": "p", "c": "dlg", "x": "「五人前」と、小野寺は繰り返した。"}, {"t": "p", "c": "nar", "x": "座敷に、せいろが五つ、伏せてあった。五人前の粉。五つのせいろ。"}, {"t": "p", "c": "dlg", "x": "「森田さん。宗吉さんは、昨夜、家族と喧嘩をしています。そのあとで蕎麦を打ちたくなる、というのは」"}, {"t": "p", "c": "dlg", "x": "「ある。ただ……」森田は、言い淀んだ。「宗吉は、気に入らない相手に打ってやる男じゃなかった」"}, {"t": "sc"}, {"t": "p", "c": "nar", "x": "署に戻る車の中で、柏木が言った。"}, {"t": "p", "c": "dlg", "x": "「三人とも、宗吉さんを殺したと言った時刻は、午後十時台から午前零時台でしたよね。でも、宗吉さんは、午前二時過ぎ以降に、水回しを始めています」"}, {"t": "p", "c": "dlg", "x": "「そう」"}, {"t": "p", "c": "dlg", "x": "「つまり、三人が『殺した』という時刻に、宗吉さんは、まだ生きていた」"}, {"t": "p", "c": "dlg", "x": "「生きていただけじゃない。そのあとで、蕎麦を打とうとしてる」"}, {"t": "p", "c": "dlg", "x": "「じゃあ、三人とも、嘘……？」"}, {"t": "p", "c": "dlg", "x": "「嘘というより」小野寺は、窓の外の暗い山を見ていた。「三人とも、朝になってから、あの部屋を見たのよ。見て、そこから、自分の話を組み立てた」"}, {"t": "p", "c": "nar", "x": "そのとき、携帯が鳴った。解剖医からだった。"}, {"t": "p", "c": "dlg", "x": "「所見が出ました。死因は、急性心筋梗塞です。冠動脈の狭窄がひどい。後頭部の創は、倒れたときのものです。頭蓋内に出血はありません。頭の傷は、死因ではありません。死亡推定は、午前二時から四時」"}, {"t": "p", "c": "nar", "x": "小野寺は、しばらく黙って聞いていた。"}, {"t": "p", "c": "dlg", "x": "「……他殺の可能性は」"}, {"t": "p", "c": "dlg", "x": "「ありません。誰も触れなくても、あの人は、あの夜に亡くなっていた」"}, {"t": "p", "c": "nar", "x": "電話を切ると、車の中に、エンジンの音だけが残った。"}, {"t": "p", "c": "dlg", "x": "「事件じゃ、なかったんですか」"}, {"t": "p", "c": "dlg", "x": "「ええ」小野寺は、静かに答えた。「殺人は、なかった。……でも」"}, {"t": "p", "c": "dlg", "x": "「でも」"}, {"t": "p", "c": "dlg", "x": "「あの三人が嘘をついた理由は、残る」"}, {"t": "ch", "no": "六", "title": "三つの落とし物"}, {"t": "p", "c": "nar", "x": "翌日、小野寺は、家族の同意を得て、霜月庵の母屋を、改めて見せてもらった。"}, {"t": "p", "c": "nar", "x": "最初に開けたのは、蓮の部屋の机の引き出しだった。"}, {"t": "p", "c": "nar", "x": "筆箱の奥に、小さな貝ボタンが入っていた。袖口用の、白く光る貝のボタン。縫い糸が、まだ数ミリ、付いたままだった。"}, {"t": "p", "c": "dlg", "x": "「お父さんの作業着のものです」と、真由美が後ろから静かに言った。「蓮くんが、持っているなんて」"}, {"t": "p", "c": "nar", "x": "小野寺は頷いて、ボタンを証拠袋に入れた。"}, {"t": "p", "c": "nar", "x": "台所に回ると、洗濯機は空だった。けれど、洗濯槽の脇の洗濯かごから、藍染めの手拭いが一枚出てきた。端に、白く「蓮」と染め抜いてある。祖父が孫に贈った手拭いだ。固く絞られ、たたまれていた。検査液を吹きつけると、淡い青白い光が、繊維の奥から滲んだ。"}, {"t": "p", "c": "nar", "x": "血の痕。"}, {"t": "p", "c": "dlg", "x": "「洗った、のね」柏木が、小声で言った。"}, {"t": "p", "c": "dlg", "x": "「お母さんがね」"}, {"t": "p", "c": "nar", "x": "柏木が、仏壇の引き出しを開けた。封の切られていない小さな薬の箱が、そこから出てきた。ニトロの、新しい箱。送り状が貼られたままだった。小野寺は、それを元の場所に戻させた。"}, {"t": "p", "c": "nar", "x": "最後に、健一の部屋の、脱ぎ捨てた作業着。ズボンのポケットに、べっ甲色の小さな髪留めが入っていた。"}, {"t": "p", "c": "nar", "x": "昨日の朝、澄香がしていなかった髪留め。いや、していたはずの髪留め。"}, {"t": "p", "c": "nar", "x": "小野寺は、三つの証拠袋を、机の上に並べた。"}, {"t": "p", "c": "nar", "x": "貝ボタン。藍染めの手拭い。べっ甲の髪留め。"}, {"t": "p", "c": "dlg", "x": "「ボタンは、健一さんのもの。持っていたのは、蓮くん」"}, {"t": "p", "c": "dlg", "x": "「手拭いは、蓮くんのもの。洗ったのは、澄香さん」"}, {"t": "p", "c": "dlg", "x": "「髪留めは、澄香さんのもの。ポケットにあったのは、健一さん」"}, {"t": "p", "c": "nar", "x": "柏木は、ひとつずつ指でなぞった。そして、手を止めた。"}, {"t": "p", "c": "dlg", "x": "「……一周してる」"}, {"t": "p", "c": "dlg", "x": "「そう」"}, {"t": "p", "c": "dlg", "x": "「蓮くんは、お父さんの物を持っていて、お父さんを庇った。澄香さんは、蓮くんの物を洗って、息子を庇った。健一さんは、澄香さんの物を隠して、奥さんを庇った」"}, {"t": "p", "c": "dlg", "x": "「全員が、自分以外の誰かの『落とし物』を、あの部屋で見つけたのよ。朝、時間をずらして。宗吉さんが倒れているのを見つけて、そして、それぞれが、落とし物の持ち主が犯人だと思った」"}, {"t": "p", "c": "dlg", "x": "「でも、実際は」"}, {"t": "p", "c": "dlg", "x": "「実際は、誰も、犯人じゃなかった。ボタンは、前の晩のもみ合いで取れた。手拭いは、倒れている祖父の頭を、蓮くんが拭こうとして置いたもの。髪留めは、澄香さんが、脈を診ようと身を屈めたときに落ちたもの」"}, {"t": "p", "c": "dlg", "x": "「全部、助けようとして、落としたもの」"}, {"t": "p", "c": "dlg", "x": "「そう」"}, {"t": "p", "c": "nar", "x": "小野寺は、座敷のほうを見た。座卓の上に、せいろが、まだ五つ、伏せて並んでいた。あれから、誰も片づけていない。"}, {"t": "p", "c": "dlg", "x": "「ひとつだけ、分からないことがある」"}, {"t": "p", "c": "dlg", "x": "「何ですか」"}, {"t": "p", "c": "dlg", "x": "「宗吉さんは、どうして、五人前だったのか」"}, {"t": "ch", "no": "七", "title": "五つのせいろ"}, {"t": "p", "c": "nar", "x": "金曜の午後、小野寺は、四人を座敷に集めた。"}, {"t": "p", "c": "nar", "x": "座卓の上に、せいろが五つ。その前に、貝ボタン、手拭い、髪留めを、順に置いた。"}, {"t": "p", "c": "dlg", "x": "「まず、結論から申し上げます。大槻宗吉さんは、殺されていません」"}, {"t": "p", "c": "nar", "x": "誰も、声を出さなかった。"}, {"t": "p", "c": "dlg", "x": "「死因は、急性心筋梗塞。頭の傷は、倒れたときのものです。あの夜、宗吉さんに触れた人はいても、殺した人は、いません」"}, {"t": "p", "c": "dlg", "x": "「でも」と、健一が言った。「私は、確かに」"}, {"t": "p", "c": "dlg", "x": "「胸を突いたのは、本当ですね。ボタンは、そのときに取れた」"}, {"t": "p", "c": "dlg", "x": "「……はい。親父はよろけて、『出ていけ』と怒鳴りました。それきりです。それが、最後に見た親父でした」"}, {"t": "p", "c": "dlg", "x": "「健一さん。あなたは、昨夜の十時二十分に、宗吉さんをのし棒で殴ったと言いました。でも、宗吉さんは、そのあとも生きていました。午前二時過ぎに、蕎麦を打ち始めているんです」"}, {"t": "p", "c": "nar", "x": "小野寺は、鉢の粉の話をした。森田の見立て。水回しの時刻。三人の自白が、どれも、その時刻より前にあること。"}, {"t": "p", "c": "dlg", "x": "「三人とも、宗吉さんが粉を回していた、と話されました。でも、その粉を回したのは、午前二時以降です。十時にも、十一時にも、零時にも、あの鉢は、空だったはずです」"}, {"t": "p", "c": "dlg", "x": "「じゃあ、どうして、僕は」蓮の声は、掠れていた。"}, {"t": "p", "c": "dlg", "x": "「朝、見たからです。倒れている宗吉さんと、鉢の粉を」"}, {"t": "p", "c": "nar", "x": "小野寺は、貝ボタンを、蓮の前に押し出した。"}, {"t": "p", "c": "dlg", "x": "「蓮くん。このボタンを拾ったのは、いつですか」"}, {"t": "p", "c": "nar", "x": "蓮は、しばらく黙っていた。それから、小さく頷いた。"}, {"t": "p", "c": "dlg", "x": "「……朝の、五時半です。祖父に謝りたくて、起きて、行きました。倒れていて、頭に血が出ていて、手拭いで拭いたけど、もう冷たくて。そのとき、祖父の右手の横に、これが落ちていました」蓮は、ボタンを見つめた。「父さんの作業着の、ボタンです。昨夜、父さんが、祖父にあんなに怒鳴っていたから。……父さんが、って」"}, {"t": "p", "c": "dlg", "x": "「だから、拾って、隠した」"}, {"t": "p", "c": "dlg", "x": "「……はい」"}, {"t": "p", "c": "nar", "x": "健一が、蓮のほうを見た。何か言おうとして、言えなかった。"}, {"t": "p", "c": "dlg", "x": "「澄香さん。手拭いを洗ったのは、いつですか」"}, {"t": "p", "c": "nar", "x": "澄香は、ゆっくりと顔を上げた。"}, {"t": "p", "c": "dlg", "x": "「六時前です。お義父さんが、朝になっても起きてこないので、打ち場に。倒れていて、近づいて、息を確かめて。そのとき、足元に、蓮の手拭いが、血を付けて落ちていて」澄香は、両手で顔を覆った。「あの子が、と思って。気づいたら、洗濯機に。……でも、その手拭いは、あの子が、お義父さんを助けようとして」"}, {"t": "p", "c": "dlg", "x": "「ええ。そうです」"}, {"t": "p", "c": "dlg", "x": "「健一さん。髪留めを拾ったのは」"}, {"t": "p", "c": "dlg", "x": "「……六時過ぎです」健一は、掠れた声で言った。「結婚二十年の年に、僕が贈ったものです。あいつが、あれを、親父の頭のそばに落とすなんて、普通は、ない。だから」"}, {"t": "p", "c": "dlg", "x": "「だから、のし棒の血を拭いて、髪留めを持ち帰った」"}, {"t": "p", "c": "dlg", "x": "「僕が拭かなきゃ、澄香の指紋が、と」"}, {"t": "p", "c": "dlg", "x": "「あののし棒からは、澄香さんの指紋どころか、誰の指紋も出ませんでした。あなたが拭いたからです」小野寺は、静かに言った。「そもそも、あの棒は、凶器ではありません」"}, {"t": "p", "c": "nar", "x": "澄香が、顔を上げた。"}, {"t": "p", "c": "dlg", "x": "「澄香さん。十一時四十五分に、お茶を持っていったのは、事実ですね」"}, {"t": "p", "c": "dlg", "x": "「……はい」"}, {"t": "p", "c": "dlg", "x": "「そのとき、お義父さんは、何か仰いましたか」"}, {"t": "p", "c": "nar", "x": "長い沈黙があった。座敷の柱時計が、二度、鳴った。"}, {"t": "p", "c": "dlg", "x": "「…………『明日は、休みだ』と」"}, {"t": "p", "c": "nar", "x": "澄香の声は、ほとんど聞こえなかった。"}, {"t": "p", "c": "dlg", "x": "「『お前らに、食わせたいものがある』と。そう言って、鉢を、出していました。まだ、空の。私は、てっきり、また嫌味か、土地の話の続きかと思って。怖くて、誰にも言えなかった。昨日から、ずっと」"}, {"t": "p", "c": "nar", "x": "誰かが、息を詰めた。"}, {"t": "p", "c": "nar", "x": "座敷の隅で、真由美が、座卓の上に、小さな紙箱を置いた。"}, {"t": "p", "c": "dlg", "x": "「……これ、柏木さんが、仏壇の引き出しで、見つけてくださったんです」"}, {"t": "p", "c": "nar", "x": "封の切られていない、新しいニトロの箱。宛名は、真由美の字だった。送り状が、貼られたままだった。"}, {"t": "p", "c": "dlg", "x": "「私が、送ったもの。父は、開けてさえいませんでした。私は薬剤師なのに、もっと、強く」"}, {"t": "p", "c": "dlg", "x": "「真由美さん」小野寺は言った。「あなたは、朝、父親が亡くなっているのを見つけて、すぐに一一〇番しました。あの部屋で、誰の物も、拾わなかった」"}, {"t": "p", "c": "nar", "x": "小野寺は、四人の顔を、順に見た。"}, {"t": "p", "c": "dlg", "x": "「三人は、自分以外の誰かを、人殺しだと思った。けれど、その誰もが、本当は、倒れている宗吉さんを、助けようとしただけだった。宗吉さんは、誰にも殺されていません。そして」"}, {"t": "p", "c": "nar", "x": "小野寺は、座卓の上の、五つのせいろに、目を向けた。"}, {"t": "p", "c": "dlg", "x": "「宗吉さんは、あの夜、あなたたちのために、蕎麦を打とうとしていました。五人前の粉。五つのせいろ。土地の話は、決着しないまま。それでも、明日は休みだ、食わせたいものがある、と」"}, {"t": "p", "c": "nar", "x": "遺体を見つけて通報しなかったことについては、後日、あらためて話を聞く。小野寺は、それだけを付け加えた。"}, {"t": "p", "c": "nar", "x": "蓮が、嗚咽を漏らした。健一が、その肩に、ゆっくりと手を置いた。澄香が、髪留めをそっと取り上げて、両手で握った。"}, {"t": "p", "c": "nar", "x": "誰も、何も言わなかった。窓の外で、山の風が、屋根のトタンを、小さく鳴らした。"}, {"t": "sc"}, {"t": "p", "c": "nar", "x": "十二月の終わりに、小野寺は、一度だけ霜月庵を訪ねた。"}, {"t": "p", "c": "nar", "x": "店は、また開いていた。暖簾の奥の打ち場で、蓮が、鉢の前に立っている。隣には、森田が付いていた。"}, {"t": "p", "c": "dlg", "x": "「水回しは、手を止めない。五本の指で、粉を、くるくる回して」"}, {"t": "p", "c": "dlg", "x": "「はい」"}, {"t": "p", "c": "nar", "x": "蓮は、粉の中に、水を少しずつ回していった。ぼそぼそだった粉が、そぼろになって、鉢の中で、小さな音を立てた。"}, {"t": "p", "c": "nar", "x": "座敷の卓には、せいろが五つ、今度は、きちんと並べてあった。四つは、それぞれの席の前に。五つ目は、床の間の、写真の前に。"}, {"t": "p", "c": "nar", "x": "小野寺は、座敷には上がらず、入口の土間から、その様子を見ていた。招かれたが、断ったのだ。"}, {"t": "p", "c": "dlg", "x": "「いただきます」"}, {"t": "p", "c": "nar", "x": "蓮の声が、して、四つの箸が、一斉に動いた。"}, {"t": "p", "c": "nar", "x": "五つ目のせいろの蕎麦は、誰の箸も触れないまま、いつまでも、艶やかに光っていた。"}, {"t": "p", "c": "fin", "x": "了"}]}</script>
+<script>
+(function () {
+  var DATA = JSON.parse(document.getElementById('data').textContent);
+  var BLOCKS = DATA.blocks, META = DATA.meta;
+  var stage = document.getElementById('stage');
+  var root = document.documentElement;
+  var TITLE = META.title;
+  document.documentElement.style.setProperty('--navy', META.color);
+  var G, pages = [], leaves = [], s = 0, mode = 'spread', book, mb, lastTurn = 0;
+
+  function esc(t) { return t.replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+  /* 判型と文字組み：版面は行数・字数が整数になるよう寸法を決める */
+  function geometry() {
+    var vw = innerWidth, vh = innerHeight, r = 0.68;
+    var H = Math.min(vh - 56, (vw - 56) / (2 * r));
+    var spread = vw >= 820 && H >= 430;
+    var W, fs;
+    if (spread) {
+      H = Math.floor(H); W = Math.floor(H * r);
+      fs = Math.max(14, Math.round(H * 0.0275));
+    } else {
+      // 一枚ずつ見せる：画面の高さいっぱいに使い、幅は画面に合わせる
+      H = Math.floor(vh - 28);
+      W = Math.floor(Math.min(vw - 20, H * r));
+      fs = Math.max(15, Math.round((W / r) * 0.031));
+    }
+    var L = Math.round(fs * 1.95);
+    var n = Math.floor((W * 0.80) / L);
+    var Tw = n * L;
+    var m = Math.floor((H * 0.86) / fs);
+    var Th = m * fs;
+    var rem = W - Tw;
+    var inner = Math.round(rem * 0.58);
+    return { H: H, W: W, fs: fs, L: L, Tw: Tw, Th: Th, inner: inner, outer: rem - inner, vpad: Math.round((H - Th) / 2), spread: spread };
+  }
+  function applyVars() {
+    var v = { W: G.W, H: G.H, fs: G.fs, L: G.L, Tw: G.Tw, Th: G.Th, inner: G.inner, outer: G.outer, vpad: G.vpad };
+    for (var k in v) root.style.setProperty('--' + k, v[k] + 'px');
+  }
+
+  /* 本文をページに流し込む：測って、溢れたら行末で割る */
+  function makeEl(it) {
+    var b = it.b, el;
+    if (b.t === 'ch') { el = document.createElement('h2'); el.innerHTML = '<span class="no">' + b.no + '</span><span class="ttl">' + esc(b.title) + '</span>'; }
+    else if (b.t === 'sc') { el = document.createElement('p'); el.className = 'scene'; el.textContent = '＊'; }
+    else if (b.t === 'gap') { el = document.createElement('div'); el.className = 'gap'; }
+    else { el = document.createElement('p'); el.className = b.c + (it.off > 0 ? ' cont' : ''); el.textContent = it.x; }
+    return el;
+  }
+  function over(el) { return el.getBoundingClientRect().left < mb.getBoundingClientRect().left - 0.5; }
+
+  function paginate() {
+    var out = [], cur = [], chapter = '';
+    var q = BLOCKS.map(function (b, i) { return { b: b, i: i, off: 0, x: b.x }; });
+    mb.innerHTML = '';
+    function commit() {
+      var carry = null;
+      if (cur.length > 1 && cur[cur.length - 1].b.t === 'ch') carry = cur.pop();
+      if (cur.length) {
+        var first = cur[0];
+        out.push({ items: cur, rh: first.b.t === 'ch' ? '' : chapter, key: first.i * 100000 + first.off });
+        cur.forEach(function (it) { if (it.b.t === 'ch') chapter = it.b.title; });
+      }
+      cur = []; mb.innerHTML = '';
+      if (carry) { cur.push(carry); mb.appendChild(makeEl(carry)); }
+    }
+    while (q.length) {
+      var it = q.shift();
+      if (it.b.t === 'ch' && cur.length) commit();
+      if (it.b.t === 'gap' && !cur.length) continue;
+      if (it.b.t === 'sc' && !cur.length && out.length) continue;
+      var el = makeEl(it);
+      mb.appendChild(el);
+      if (!over(el)) { cur.push(it); continue; }
+      if (it.b.t === 'p' && it.x.length > 1) {
+        var lo = 0, hi = it.x.length - 1;
+        while (lo < hi) {
+          var mid = Math.ceil((lo + hi) / 2);
+          el.textContent = it.x.slice(0, mid);
+          if (over(el)) hi = mid - 1; else lo = mid;
+        }
+        if (lo >= 4) {
+          cur.push({ b: it.b, i: it.i, off: it.off, x: it.x.slice(0, lo) });
+          q.unshift({ b: it.b, i: it.i, off: it.off + lo, x: it.x.slice(lo) });
+          commit();
+          continue;
+        }
+      }
+      mb.removeChild(el);
+      if (cur.length) { commit(); q.unshift(it); }
+      else { cur.push(it); mb.appendChild(el); }
+    }
+    if (cur.length) commit();
+    pages = out;
+  }
+
+  /* 各面のHTML */
+  function itemHTML(it) {
+    var b = it.b;
+    if (b.t === 'ch') return '<h2><span class="no">' + b.no + '</span><span class="ttl">' + esc(b.title) + '</span></h2>';
+    if (b.t === 'sc') return '<p class="scene">＊</p>';
+    if (b.t === 'gap') return '<div class="gap"></div>';
+    return '<p class="' + b.c + (it.off > 0 ? ' cont' : '') + '">' + esc(it.x) + '</p>';
+  }
+  function faceHTML(i, side) {
+    var curl = side === 'L' ? '<i class="curl"></i>' : '';
+    if (i < pages.length) {
+      var p = pages[i];
+      return '<div class="pg ' + side + '"><div class="text">' + p.items.map(itemHTML).join('') + '</div>' +
+        (p.rh ? '<div class="rh">' + esc(p.rh) + '</div>' : '') + '<div class="pn">' + (i + 1) + '</div>' + curl + '</div>';
+    }
+    if (i === pages.length) {
+      return '<div class="pg ' + side + '"><div class="text colo"><p class="ct">' + esc(TITLE) + '</p><p class="cd">' + META.date + '　初版</p></div>' + curl + '</div>';
+    }
+    return '<div class="pg ' + side + ' blank">' + curl + '</div>';
+  }
+  function coverHTML() {
+    var art = '';
+    if (META.cover === 'seiro') {
+      // 上から見た五つのせいろ。中央の一つが宗吉の席。
+      var pos = [[8, 8], [68, 8], [38, 38], [8, 68], [68, 68]], sq = '';
+      pos.forEach(function (p, i) {
+        var o = i === 2 ? 1 : .72;
+        sq += '<g opacity="' + o + '"><rect x="' + p[0] + '" y="' + p[1] + '" width="24" height="24" rx="1.5"/>';
+        for (var k = 1; k <= 4; k++) sq += '<line x1="' + (p[0] + 3) + '" y1="' + (p[1] + k * 4.4) + '" x2="' + (p[0] + 21) + '" y2="' + (p[1] + k * 4.4) + '"/>';
+        sq += '</g>';
+      });
+      art = '<svg viewBox="0 0 100 100" fill="none" stroke="#c8ad6e" stroke-width=".8" stroke-linecap="round" aria-hidden="true">' + sq + '</svg>';
+    } else {
+      var ticks = '';
+      for (var a = 0; a < 12; a++) {
+        var big = a % 3 === 0;
+        ticks += '<line x1="50" y1="' + (big ? 7 : 9) + '" x2="50" y2="' + (big ? 14 : 12.5) + '" transform="rotate(' + (a * 30) + ' 50 50)" />';
+      }
+      art = '<svg viewBox="0 0 100 100" fill="none" stroke="#c8ad6e" stroke-width=".9" stroke-linecap="round" aria-hidden="true">' +
+        '<circle cx="50" cy="50" r="44" opacity=".75"/>' + ticks +
+        '<line x1="50" y1="50" x2="50" y2="17" opacity=".95"/>' +
+        '<line x1="50" y1="50" x2="50" y2="17" transform="rotate(42 50 50)" stroke-dasharray="1.6 2.6" opacity=".7"/>' +
+        '<line x1="50" y1="50" x2="26" y2="36" stroke-width="1.6" opacity=".95"/>' +
+        '<circle cx="50" cy="50" r="1.8" fill="#c8ad6e" stroke="none"/></svg>';
+    }
+    return '<div class="cv"><div class="frame"></div><div class="label">' + esc(TITLE) + '</div>' + art + '</div>';
+  }
+
+  /* 丁を組む：表紙、見返し、本文、奥付 */
+  function buildLeaves() {
+    var total = pages.length + 1; // 本文 + 奥付
+    leaves = [{ front: coverHTML(), back: '<div class="ep"></div>', cover: true }];
+    if (G.spread) {
+      var M = Math.ceil(total / 2);
+      for (var k = 1; k <= M; k++) leaves.push({ front: faceHTML(2 * k - 2, 'L'), back: faceHTML(2 * k - 1, 'R') });
+    } else {
+      for (var j = 1; j <= total; j++) leaves.push({ front: faceHTML(j - 1, 'L'), back: '<div class="pg R blank"></div>' });
+    }
+  }
+
+  function buildDOM() {
+    stage.innerHTML = '';
+    book = document.createElement('div');
+    book.className = 'book ' + mode;
+    book.style.width = (G.spread ? 2 * G.W : G.W) + 'px';
+    book.style.height = G.H + 'px';
+    book.innerHTML = '<div class="shadow"></div><div class="board"><div class="ep"></div></div><div class="edge el"></div><div class="edge er"></div>';
+    leaves.forEach(function (lf, k) {
+      var d = document.createElement('div');
+      d.className = 'leaf' + (k === 0 ? ' cover' : '');
+      d.innerHTML = '<div class="face front">' + lf.front + '</div><div class="face back' + (k === 0 ? ' endpaper' : '') + '">' + lf.back + '</div>';
+      lf.el = d; book.appendChild(d);
+    });
+    stage.appendChild(book);
+  }
+
+  function edgeShadow(t, dir) {
+    var out = [];
+    for (var i = 1; i <= t; i++) out.push((dir * i) + 'px 0 0 ' + (i % 2 ? '#e4dfd0' : '#c9c2b0'));
+    return out.join(',') || 'none';
+  }
+
+  function render() {
+    var n = leaves.length;
+    leaves.forEach(function (lf, k) {
+      var fl = k < s;
+      lf.el.classList.toggle('flipped', fl);
+      lf.el.style.display = (k >= s - 3 && k <= s + 3) ? '' : 'none';
+      if (!lf.turn) lf.el.style.zIndex = 10 + (fl ? k + 1 : n - k + 1);
+    });
+    var el = book.querySelector('.edge.el'), er = book.querySelector('.edge.er'), sh = book.querySelector('.shadow');
+    el.style.boxShadow = edgeShadow(Math.max(1, Math.round((1 - s / n) * 5)), -1);
+    er.style.boxShadow = edgeShadow(Math.max(0, Math.round((s / n) * 5)), 1);
+    var closed = G.spread && s === 0;
+    er.style.opacity = s === 0 ? 0 : 1;
+    el.style.opacity = s >= n ? 0 : 1;
+    book.style.transform = closed ? 'translateX(' + (G.W / 2) + 'px)' : '';
+    sh.style.width = (closed || !G.spread ? G.W : 2 * G.W) + 'px';
+    sh.style.left = '0px';
+    save();
+  }
+
+  function pageIndexNow() {
+    if (s < 1) return -1;
+    var i = G.spread ? 2 * s - 2 : s - 1;
+    return Math.min(i, pages.length - 1);
+  }
+  function save() {
+    try {
+      var i = pageIndexNow();
+      if (i < 0) localStorage.removeItem('book-key-' + META.id);
+      else localStorage.setItem('book-key-' + META.id, String(pages[i].key));
+    } catch (e) {}
+  }
+  function restore() {
+    try {
+      var key = parseInt(localStorage.getItem('book-key-' + META.id), 10);
+      if (isNaN(key)) return 0;
+      var idx = 0;
+      pages.forEach(function (p, i) { if (p.key <= key) idx = i; });
+      var num = idx + 1, st;
+      if (G.spread) st = num % 2 === 1 ? (num + 1) / 2 : num / 2 + 1; else st = num;
+      return Math.max(1, Math.min(st, leaves.length - 1));
+    } catch (e) { return 0; }
+  }
+
+  function go(dir) {
+    var now = Date.now();
+    if (now - lastTurn < 380) return;
+    var n = leaves.length;
+    if ((dir > 0 && s >= n) || (dir < 0 && s <= 0)) return;
+    lastTurn = now;
+    var k = dir > 0 ? s : s - 1;
+    s += dir;
+    var lf = leaves[k];
+    lf.turn = true;
+    lf.el.style.zIndex = 3000;
+    lf.el.classList.remove('turning');
+    void lf.el.offsetWidth;
+    lf.el.classList.add('turning');
+    render();
+    setTimeout(function () { lf.turn = false; lf.el.classList.remove('turning'); render(); }, 980);
+  }
+
+  /* 全文を読み上げ用に隠して持つ */
+  function addSR() {
+    var sr = document.createElement('div');
+    sr.className = 'sr';
+    sr.textContent = BLOCKS.map(function (b) { return b.t === 'ch' ? b.no + ' ' + b.title : (b.x || ''); }).join('\n');
+    document.body.appendChild(sr);
+  }
+
+  function build(startS) {
+    G = geometry();
+    mode = G.spread ? 'spread' : 'single';
+    applyVars();
+    if (!mb) { mb = document.createElement('div'); mb.className = 'text measure'; document.body.appendChild(mb); }
+    paginate();
+    mb.innerHTML = '';
+    buildLeaves();
+    buildDOM();
+    s = startS === undefined ? restore() : startS;
+    s = Math.max(0, Math.min(s, leaves.length));
+    render();
+  }
+
+  /* 操作：タップ・スワイプ・キー・ホイール */
+  var px = null;
+  stage.addEventListener('pointerdown', function (e) { px = e.clientX; });
+  stage.addEventListener('pointerup', function (e) {
+    if (px === null) return;
+    var dx = e.clientX - px; px = null;
+    if (Math.abs(dx) > 50) go(dx > 0 ? 1 : -1);
+    else if (s === 0) go(1);
+    else go(e.clientX < innerWidth / 2 ? 1 : -1);
+  });
+  stage.addEventListener('pointercancel', function () { px = null; });
+  addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft' || e.key === 'PageDown' || e.key === ' ') { go(1); e.preventDefault(); }
+    else if (e.key === 'ArrowRight' || e.key === 'PageUp') { go(-1); e.preventDefault(); }
+    else if (e.key === 'Home') { s = 0; render(); }
+  });
+  var wl = 0;
+  addEventListener('wheel', function (e) {
+    var now = Date.now();
+    if (now - wl < 450 || Math.abs(e.deltaY) < 8) return;
+    wl = now; go(e.deltaY > 0 ? 1 : -1);
+  }, { passive: true });
+
+  var rt;
+  addEventListener('resize', function () {
+    clearTimeout(rt);
+    rt = setTimeout(function () {
+      var i = pageIndexNow(), key = i >= 0 ? pages[i].key : null;
+      build(0);
+      if (key !== null) {
+        var idx = 0; pages.forEach(function (p, j) { if (p.key <= key) idx = j; });
+        var num = idx + 1;
+        s = G.spread ? (num % 2 === 1 ? (num + 1) / 2 : num / 2 + 1) : num;
+        s = Math.max(1, Math.min(s, leaves.length - 1));
+        render();
+      }
+    }, 250);
+  });
+
+  /* フォントが届いてから組む（字送りが変わるため） */
+  var all = BLOCKS.map(function (b) { return (b.x || '') + (b.title || '') + (b.no || ''); }).join('') + TITLE + META.date + '初版';
+  var wait = Promise.race([
+    Promise.all([
+      document.fonts.load('400 16px "Shippori Mincho"', all),
+      document.fonts.load('500 16px "Shippori Mincho"', all),
+      document.fonts.load('700 16px "Shippori Mincho"', all)
+    ]),
+    new Promise(function (r) { setTimeout(r, 4000); })
+  ]).catch(function () {});
+  wait.then(function () { build(); addSR(); });
+})();
+</script>
+</body>
+</html>
