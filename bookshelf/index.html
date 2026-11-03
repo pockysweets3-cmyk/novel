@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>本棚</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* 作品は背表紙で並ぶ。選ぶのは触れるだけ。新しい作品は下の WORKS に一行足す。 */
+:root {
+  --desk: #14171c;
+  --wood: #2f261f;
+  --wood-hi: #4a3b2f;
+  --paper: #ece5d3;
+  --gold: #c8ad6e;
+  --serif: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  color-scheme: dark;
+}
+html, body {
+  min-height: 100%;
+  margin: 0;
+  background:
+    radial-gradient(ellipse at 50% 22%, rgba(120, 96, 60, .16), transparent 55%),
+    radial-gradient(ellipse at 50% 40%, #242a33 0%, var(--desk) 75%);
+  background-attachment: fixed;
+  background-color: var(--desk);
+}
+body {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  padding: 6vh 16px;
+  box-sizing: border-box;
+}
+#shelves {
+  display: grid;
+  gap: 54px;
+  width: min(940px, 100%);
+  margin: 0 auto;
+}
+.row { position: relative; }
+.books {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  min-height: 300px;
+  padding: 0 28px;
+}
+.board {
+  position: relative;
+  height: 18px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--wood-hi) 0, var(--wood) 14%, #241c16 100%);
+  box-shadow: 0 14px 22px -8px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 220, 170, .18);
+  z-index: 1;
+}
+.book {
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--w);
+  height: var(--h);
+  margin-bottom: -2px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 3px 3px 1px 1px;
+  background-color: var(--c);
+  background-image:
+    linear-gradient(90deg, rgba(0, 0, 0, .42) 0, rgba(255, 255, 255, .09) 26%, rgba(255, 255, 255, .02) 55%, rgba(0, 0, 0, .34) 100%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px);
+  box-shadow: 2px 0 6px rgba(0, 0, 0, .45);
+  transform-origin: 50% 100%;
+  transition: transform .28s cubic-bezier(.3, .7, .3, 1), box-shadow .28s;
+  z-index: 2;
+  outline: none;
+}
+.book::before, .book::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 6px;
+  border-top: 1px solid var(--gold);
+  border-bottom: 1px solid var(--gold);
+  opacity: .55;
+}
+.book::before { top: 12px; }
+.book::after { bottom: 12px; }
+.book .label {
+  position: absolute;
+  left: 50%;
+  top: 34px;
+  translate: -50% 0;
+  padding: .85em .3em;
+  writing-mode: vertical-rl;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: calc(var(--w) * .3);
+  letter-spacing: .3em;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: #1c1a17;
+  background: var(--paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+.book:hover, .book:focus-visible {
+  transform: translateY(-12px) rotate(-1.4deg);
+  box-shadow: 4px 8px 14px rgba(0, 0, 0, .5);
+}
+.book:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.book:active { transform: translateY(-6px) rotate(-.6deg); }
+@media (max-width: 600px) {
+  #shelves { gap: 44px; }
+  .books { min-height: 250px; padding: 0 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .book { transition: none; }
+}
+</style>
+</head>
+<body>
+<main id="shelves"></main>
+<script>
+(function () {
+  // 作品を足すときは、ここに一行増やす。href は作品フォルダ（末尾の / まで）。
+  var WORKS = [
+    { title: '七分遅れの時計', href: 'tokei/', color: '#1c2a3d', w: 66, h: 300 }
+  ];
+
+  var host = document.getElementById('shelves');
+  function render() {
+    var avail = Math.min(940, innerWidth - 32) - (innerWidth <= 600 ? 28 : 56);
+    var scale = innerWidth <= 600 ? 0.84 : 1;
+    host.innerHTML = '';
+    var rows = [[]], used = 0;
+    WORKS.forEach(function (b) {
+      var w = Math.round(b.w * scale) + 5;
+      if (used + w > avail && rows[rows.length - 1].length) { rows.push([]); used = 0; }
+      rows[rows.length - 1].push(b); used += w;
+    });
+    rows.forEach(function (row) {
+      var r = document.createElement('div'); r.className = 'row';
+      var shelf = document.createElement('div'); shelf.className = 'books';
+      row.forEach(function (b) {
+        var a = document.createElement('a');
+        a.className = 'book'; a.href = b.href; a.setAttribute('aria-label', b.title);
+        a.style.setProperty('--w', Math.round(b.w * scale) + 'px');
+        a.style.setProperty('--h', Math.round(b.h * scale) + 'px');
+        a.style.setProperty('--c', b.color);
+        var l = document.createElement('span'); l.className = 'label'; l.textContent = b.title;
+        a.appendChild(l); shelf.appendChild(a);
+      });
+      var board = document.createElement('div'); board.className = 'board';
+      r.appendChild(shelf); r.appendChild(board); host.appendChild(r);
+    });
+  }
+  window.renderShelf = function (w) { if (w) WORKS = w; render(); };
+  render();
+  var t; addEventListener('resize', function () { clearTimeout(t); t = setTimeout(render, 150); });
+})();
+</script>
+</body>
+</html>
